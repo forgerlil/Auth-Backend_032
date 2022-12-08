@@ -34,10 +34,21 @@ const loginUser = async (req, res) => {
     if (!email || !password)
       return res.status(400).send('Please provide all fields');
 
-    const { _id } = await userCollection.findOne({ email });
+    // In addition to finding the user, we have to select and forcefully include the password (with the + sign
+    // when specifying the field) to come back from querying the user, so we can validate the password.
+    const checkUser = await userCollection
+      .findOne({ email })
+      .select('+password');
     if (!checkUser) return res.status(400).send('User already exists');
 
-    const token = jwt.sign({ _id }, process.env.JWT_SECRET);
+    // In addition to what we spoke, whenever a user is logged in, we have to check whether
+    // the password that comes from the request is correct!
+    // The bcrypt library can encode our password and compare to the encrypted password stored
+    // in the document in the database. If they don't match, we send an error back to the client.
+    const pwdMatch = await bcrypt.compare(password, checkUser.password);
+    if (!pwdMatch) return res.status(400).send('Incorrect password');
+
+    const token = jwt.sign({ _id: checkUser._id }, process.env.JWT_SECRET);
 
     return res.json(token);
   } catch (error) {
